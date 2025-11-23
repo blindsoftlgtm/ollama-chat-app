@@ -1,8 +1,8 @@
 # Olama-Chat
 
-## What is Llama-Chat?
+## What is Ollama-Chat?
 
-Llama-chat is a client for Llama, which is a program for running local LLMs (Large Language Models) on your computer. It provides an easy-to-use interface to interact with models powered by the Ollama API.
+Ollama-chat is a client for Llama, which is a program for running local LLMs (Large Language Models) on your computer. It provides an easy-to-use interface to interact with models powered by the Ollama API.
 
 ## Installation
 
