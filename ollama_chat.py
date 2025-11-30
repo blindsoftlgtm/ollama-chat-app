@@ -510,10 +510,14 @@ class MainFrame(wx.Frame):
         open_chat_btn = wx.Button(main_panel, label="Open Chat (Ctrl+O)")
         open_chat_btn.Bind(wx.EVT_BUTTON, self.on_open_chat)
         
+        copy_btn = wx.Button(main_panel, label="Copy Response (Ctrl+C)")
+        copy_btn.Bind(wx.EVT_BUTTON, self.on_copy_response)
+        
         button_sizer.Add(send_btn, 0, wx.ALL, 5)
         button_sizer.Add(new_chat_btn, 0, wx.ALL, 5)
         button_sizer.Add(save_chat_btn, 0, wx.ALL, 5)
         button_sizer.Add(open_chat_btn, 0, wx.ALL, 5)
+        button_sizer.Add(copy_btn, 0, wx.ALL, 5)
         main_sizer.Add(button_sizer, 0, wx.CENTER | wx.ALL, 5)
         
         # Status bar
@@ -573,6 +577,9 @@ class MainFrame(wx.Frame):
             return
         elif ctrl_down and key_code == ord('M'):
             self.on_select_model(None)
+            return
+        elif ctrl_down and key_code == ord('C'):
+            self.on_copy_response(None)
             return
         elif ctrl_down and key_code == wx.WXK_RETURN:
             self.on_send_message(None)
@@ -835,21 +842,45 @@ class MainFrame(wx.Frame):
                 self.status_bar.SetStatusText("Chat deleted")
                 wx.MessageBox("Chat deleted successfully", "Success", wx.OK | wx.ICON_INFORMATION)
             except Exception as e:
-                wx.MessageBox(f"Error deleting chat: {e}", "Error", wx.OK | wx.ICON_ERROR)
-        dlg.Destroy()
+                wx.MessageBox(f"Error deleting chat: {e}", "Error", wx.OK | wx.ICON_ERROR), event):
+        dlg.Destroy()'s responses to clipboard"""
     
-    def on_exit(self, event):
+    def on_exit(self, event):ges to copy", "Empty Chat", wx.OK | wx.ICON_WARNING)
         """Exit application"""
         if self.messages and not self.is_saved:
-            dlg = wx.MessageDialog(
-                self,
+            dlg = wx.MessageDialog(t messages
                 "Unsaved changes. Exit without saving?",
+                self,nt", "") for msg in self.messages if msg.get("role") == "assistant"]
                 "Confirm Exit",
-                wx.YES_NO | wx.ICON_QUESTION
+                wx.YES_NO | wx.ICON_QUESTION("No model responses to copy", "No Responses", wx.OK | wx.ICON_WARNING)
             )
             result = dlg.ShowModal()
-            dlg.Destroy()
-            if result != wx.ID_YES:
+            dlg.Destroy()# Join all responses with separator
+            if result != wx.ID_YES:n" + "=" * 50 + "\n".join(assistant_messages)
+                return        
+                # Copy to clipboard
+        self.Close(True)pen():
+ata(wx.TextDataObject(copied_text))
+        wx.TheClipboard.Close()
+class OllamaChatApp(wx.App):us_bar.SetStatusText("Model responses copied to clipboard")
+    """Main application class"""
+    d to access clipboard", "Error", wx.OK | wx.ICON_ERROR)
+    def OnInit(self):
+        """Initialize application"""f, event):
+        self.frame = MainFrame()        """Exit application"""
+        self.frame.Show()        if self.messages and not self.is_saved:
+        return True dlg = wx.MessageDialog(
+
+changes. Exit without saving?",
+def main():onfirm Exit",
+    """Entry point"""                wx.YES_NO | wx.ICON_QUESTION
+    app = OllamaChatApp()            )
+    app.MainLoop()howModal()
+  dlg.Destroy()
+
+
+
+    main()if __name__ == "__main__":            if result != wx.ID_YES:
                 return
         
         self.Close(True)
