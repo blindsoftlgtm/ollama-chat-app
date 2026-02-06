@@ -1,3 +1,4 @@
 requests
 wxPython
 ollama
+pyttsx    3
