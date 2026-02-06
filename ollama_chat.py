@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 """
 Ollama Chat - A wxPython GUI application for local LLM chat with Ollama
 Features:
@@ -7,14 +7,16 @@ Features:
 - Screen reader accessibility
 - Model management and chat history
 - Open saved chats directly
+- Text-to-speech support using pyttsx3
 """
 
 import wx
 import json
 import os
 import subprocess
-import threading            
+import threading
 import requests
+import pyttsx3
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -28,6 +30,10 @@ OLLAMA_API = "http://localhost:11434"
 # Ensure directories exist
 CONFIG_DIR.mkdir(exist_ok=True)
 CHATS_DIR.mkdir(exist_ok=True)
+
+# Initialize TTS engine globally
+tts_engine = pyttsx3.init()
+tts_engine.setProperty('rate', 150)  # Speed of speech
 
 
 class OllamaManager:
@@ -195,6 +201,51 @@ class ChatManager:
             return None
 
 
+class TTSManager:
+    """Manages text-to-speech functionality"""
+    
+    def __init__(self):
+        self.engine = pyttsx3.init()
+        self.engine.setProperty('rate', 150)  # Speech rate
+        self.is_speaking = False
+    
+    def speak(self, text: str) -> None:
+        """Speak the given text"""
+        if not text or text.strip() == "":
+            return
+        
+        try:
+            self.is_speaking = True
+            self.engine.say(text)
+            self.engine.runAndWait()
+            self.is_speaking = False
+        except Exception as e:
+            print(f"Error in TTS: {e}")
+            self.is_speaking = False
+    
+    def stop(self) -> None:
+        """Stop current speech"""
+        try:
+            self.engine.stop()
+            self.is_speaking = False
+        except Exception as e:
+            print(f"Error stopping TTS: {e}")
+    
+    def set_rate(self, rate: int) -> None:
+        """Set speech rate (50-300)"""
+        try:
+            self.engine.setProperty('rate', max(50, min(300, rate)))
+        except Exception as e:
+            print(f"Error setting speech rate: {e}")
+    
+    def set_volume(self, volume: float) -> None:
+        """Set volume (0.0-1.0)"""
+        try:
+            self.engine.setProperty('volume', max(0.0, min(1.0, volume)))
+        except Exception as e:
+            print(f"Error setting volume: {e}")
+
+
 class ModelManagerDialog(wx.Dialog):
     """Dialog for managing Ollama models"""
     
@@ -289,8 +340,9 @@ class ModelManagerDialog(wx.Dialog):
 class SettingsDialog(wx.Dialog):
     """Dialog for application settings"""
     
-    def __init__(self, parent):
-        super().__init__(parent, title="Settings", size=(400, 300))
+    def __init__(self, parent, tts_manager):
+        super().__init__(parent, title="Settings", size=(400, 400))
+        self.tts_manager = tts_manager
         self.init_ui()
         self.load_settings()
     
@@ -318,6 +370,29 @@ class SettingsDialog(wx.Dialog):
         self.autosave_cb = wx.CheckBox(self, label="Auto-save chats every 5 minutes", name="Auto-save setting")
         main_sizer.Add(self.autosave_cb, 0, wx.ALL, 5)
         
+        # TTS Settings
+        tts_label = wx.StaticText(self, label="Text-to-Speech Settings")
+        tts_label.SetFont(tts_label.GetFont().MakeBold())
+        main_sizer.Add(tts_label, 0, wx.ALL, 5)
+        
+        # Speech Rate
+        rate_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        rate_label = wx.StaticText(self, label="Speech Rate:")
+        self.rate_slider = wx.Slider(self, value=150, minValue=50, maxValue=300, name="Speech rate slider")
+        self.rate_slider.SetToolTip("Adjust speech speed (50-300)")
+        rate_sizer.Add(rate_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        rate_sizer.Add(self.rate_slider, 1, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(rate_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        
+        # Volume
+        volume_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        volume_label = wx.StaticText(self, label="Volume:")
+        self.volume_slider = wx.Slider(self, value=100, minValue=0, maxValue=100, name="Volume slider")
+        self.volume_slider.SetToolTip("Adjust TTS volume (0-100)")
+        volume_sizer.Add(volume_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        volume_sizer.Add(self.volume_slider, 1, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(volume_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        
         # Buttons
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         save_btn = wx.Button(self, wx.ID_SAVE)
@@ -340,6 +415,8 @@ class SettingsDialog(wx.Dialog):
                     self.api_input.SetValue(config.get("api_url", OLLAMA_API))
                     self.theme_choice.SetSelection(0 if config.get("theme", "Light") == "Light" else 1)
                     self.autosave_cb.SetValue(config.get("autosave", False))
+                    self.rate_slider.SetValue(config.get("tts_rate", 150))
+                    self.volume_slider.SetValue(config.get("tts_volume", 100))
             else:
                 self.api_input.SetValue(OLLAMA_API)
                 self.theme_choice.SetSelection(0)
@@ -352,10 +429,17 @@ class SettingsDialog(wx.Dialog):
             config = {
                 "api_url": self.api_input.GetValue(),
                 "theme": self.theme_choice.GetStringSelection(),
-                "autosave": self.autosave_cb.GetValue()
+                "autosave": self.autosave_cb.GetValue(),
+                "tts_rate": self.rate_slider.GetValue(),
+                "tts_volume": self.volume_slider.GetValue()
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f, indent=2)
+            
+            # Update TTS settings
+            self.tts_manager.set_rate(self.rate_slider.GetValue())
+            self.tts_manager.set_volume(self.volume_slider.GetValue() / 100.0)
+            
             wx.MessageBox("Settings saved successfully", "Success", wx.OK | wx.ICON_INFORMATION)
         except Exception as e:
             wx.MessageBox(f"Error saving settings: {e}", "Error", wx.OK | wx.ICON_ERROR)
@@ -446,6 +530,7 @@ class MainFrame(wx.Frame):
         self.current_chat_file = None
         self.is_saved = False
         self.messages = []
+        self.tts_manager = TTSManager()
         self.init_ui()
         self.bind_shortcuts()
         self.load_models()
@@ -513,11 +598,15 @@ class MainFrame(wx.Frame):
         copy_btn = wx.Button(main_panel, label="Copy Response (Ctrl+C)")
         copy_btn.Bind(wx.EVT_BUTTON, self.on_copy_response)
         
+        speak_btn = wx.Button(main_panel, label="Speak Answer (Ctrl+P)")
+        speak_btn.Bind(wx.EVT_BUTTON, self.on_speak_response)
+        
         button_sizer.Add(send_btn, 0, wx.ALL, 5)
         button_sizer.Add(new_chat_btn, 0, wx.ALL, 5)
         button_sizer.Add(save_chat_btn, 0, wx.ALL, 5)
         button_sizer.Add(open_chat_btn, 0, wx.ALL, 5)
         button_sizer.Add(copy_btn, 0, wx.ALL, 5)
+        button_sizer.Add(speak_btn, 0, wx.ALL, 5)
         main_sizer.Add(button_sizer, 0, wx.CENTER | wx.ALL, 5)
         
         # Status bar
@@ -580,6 +669,9 @@ class MainFrame(wx.Frame):
             return
         elif ctrl_down and key_code == ord('C'):
             self.on_copy_response(None)
+            return
+        elif ctrl_down and key_code == ord('P'):
+            self.on_speak_response(None)
             return
         elif ctrl_down and key_code == wx.WXK_RETURN:
             self.on_send_message(None)
@@ -801,7 +893,7 @@ class MainFrame(wx.Frame):
     
     def show_settings(self):
         """Show settings dialog"""
-        dlg = SettingsDialog(self)
+        dlg = SettingsDialog(self, self.tts_manager)
         dlg.ShowModal()
         dlg.Destroy()
     
@@ -864,6 +956,27 @@ class MainFrame(wx.Frame):
         else:
             wx.MessageBox("Failed to access clipboard", "Error", wx.OK | wx.ICON_ERROR)
     
+    def on_speak_response(self, event):
+        """Speak the last assistant response"""
+        assistant_messages = [msg.get("content", "") for msg in self.messages if msg.get("role") == "assistant"]
+        
+        if not assistant_messages:
+            wx.MessageBox("No model responses to speak", "No Responses", wx.OK | wx.ICON_WARNING)
+            return
+        
+        # Get the last response
+        last_response = assistant_messages[-1]
+        
+        # Speak in a separate thread to avoid blocking UI
+        def speak_thread():
+            self.status_bar.SetStatusText("Speaking...")
+            self.tts_manager.speak(last_response)
+            wx.CallAfter(self.status_bar.SetStatusText, "Ready")
+        
+        thread = threading.Thread(target=speak_thread)
+        thread.daemon = True
+        thread.start()
+    
     def on_exit(self, event):
         """Exit application"""
         if self.messages and not self.is_saved:
@@ -879,6 +992,8 @@ class MainFrame(wx.Frame):
             if result != wx.ID_YES:
                 return
         
+        # Stop TTS if speaking
+        self.tts_manager.stop()
         self.Close(True)
 
 
@@ -898,5 +1013,5 @@ def main():
     app.MainLoop()
 
 
-if __name__ == "__main__":
-        main()
+if __name_        _ == "__main__":
+    main()
